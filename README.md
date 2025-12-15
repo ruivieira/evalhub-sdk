@@ -14,20 +14,17 @@ EvalHub → (Standard API) → Your Framework Adapter → Your Evaluation Framew
 
 ## Architecture
 
-```
-┌─────────────┐    ┌─────────────────────┐    ┌──────────────────┐
-│   EvalHub   │───▶│  Framework Adapter  │───▶│ Your Framework   │
-│             │    │  (SDK + Glue Code)  │    │ (LMEval, Custom, │
-│             │◀───│                     │◀───│  RAGAS, etc.)    │
-└─────────────┘    └─────────────────────┘    └──────────────────┘
-      │                        │
-      │            ┌─────────────────────┐
-      └───────────▶│   Standard API      │
-                   │ /health             │
-                   │ /info               │
-                   │ /benchmarks         │
-                   │ /evaluations        │
-                   └─────────────────────┘
+```mermaid
+graph LR
+    EH[EvalHub]
+    FA[Framework Adapter<br/>SDK + Glue Code]
+    YF[Your Framework<br/>LMEval, Custom,<br/>RAGAS, etc.]
+    API[Standard API<br/>─────────────<br/>/health<br/>/info<br/>/benchmarks<br/>/evaluations]
+
+    EH <--> FA
+    FA <--> YF
+    EH --> API
+    FA --> API
 ```
 
 ### Key Components
@@ -127,12 +124,6 @@ curl http://localhost:8080/api/v1/benchmarks
 
 ### LightEval Framework Example
 See [examples/lighteval_adapter/](examples/lighteval_adapter/) for a production-ready example with:
-
-- ✅ **Real Framework Integration** - Complete LightEval wrapper
-- ✅ **Container Deployment** - Docker/Podman container with health checks
-- ✅ **External Client Demo** - Jupyter notebook making HTTP requests to containerized adapter
-- ✅ **API Testing** - All endpoints tested with real evaluation jobs from external client
-- ✅ **Production Ready** - Configuration, logging, error handling
 
 Try the demo (notebook runs **outside** the container):
 ```bash
@@ -413,67 +404,62 @@ framework_config:
 
 ## Deployment
 
-### Docker
+### Podman with Red Hat UBI
 
 ```dockerfile
-FROM python:3.11-slim
+# Framework Adapter Container
+FROM registry.access.redhat.com/ubi9/python-311:latest
 
-COPY . /app
+# Set environment variables for Python optimization
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
 WORKDIR /app
 
-RUN pip install evalhub-sdk
-RUN pip install -e .  # Install your adapter
+# Copy source code
+COPY . ./
+
+# Install dependencies
+RUN pip install -e .
 
 EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/api/v1/health || exit 1
 
 CMD ["evalhub-adapter", "run", "my_adapter:MyAdapter", "--port", "8080"]
 ```
 
-### Kubernetes
+### Building and Running with Podman
 
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-framework-adapter
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: my-framework-adapter
-  template:
-    metadata:
-      labels:
-        app: my-framework-adapter
-    spec:
-      containers:
-      - name: adapter
-        image: my-framework-adapter:latest
-        ports:
-        - containerPort: 8080
-        env:
-        - name: LOG_LEVEL
-          value: "INFO"
-        resources:
-          requests:
-            memory: "1Gi"
-            cpu: "500m"
-          limits:
-            memory: "4Gi"
-            cpu: "2000m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-framework-adapter
-spec:
-  selector:
-    app: my-framework-adapter
-  ports:
-  - protocol: TCP
-    port: 8080
-    targetPort: 8080
+```bash
+# Build the image
+podman build -t your-adapter:latest .
+
+# Run the container
+podman run -d \
+  --name your-adapter \
+  -p 8080:8080 \
+  --health-cmd='curl -f http://localhost:8080/api/v1/health || exit 1' \
+  --health-interval=30s \
+  --health-timeout=10s \
+  --health-start-period=30s \
+  --health-retries=3 \
+  your-adapter:latest
+
+# Check container health
+podman ps
+
+# View logs
+podman logs your-adapter
+
+# Stop and clean up
+podman stop your-adapter
+podman rm your-adapter
 ```
+
+**Note**: For frameworks requiring additional build tools, see [examples/lighteval_adapter/](examples/lighteval_adapter/) for a production deployment example with UBI minimal and custom dependencies.
 
 ## Development
 
@@ -554,13 +540,6 @@ evalhub-adapter run my_adapter:MyAdapter --reload --log-level DEBUG
 
 ### Quality Assurance
 
-The project uses comprehensive QA tools:
-
-- **Testing**: pytest with async support, coverage reporting
-- **Type Checking**: mypy with strict configuration
-- **Linting**: ruff for fast, modern Python linting
-- **Formatting**: ruff format for consistent code style
-- **Pre-commit**: Automated quality checks on commit
 
 Run all quality checks:
 ```bash
@@ -577,101 +556,6 @@ mypy src/evalhub_sdk
 pytest -v --cov=src/evalhub_sdk
 ```
 
-## Best Practices
-
-### 1. Error Handling
-
-```python
-async def submit_evaluation(self, request: EvaluationRequest) -> EvaluationJob:
-    try:
-        # Validate request
-        if not request.benchmark_id:
-            raise ValueError("Benchmark ID is required")
-
-        # Check if benchmark exists
-        benchmark = await self.get_benchmark_info(request.benchmark_id)
-        if not benchmark:
-            raise ValueError(f"Benchmark '{request.benchmark_id}' not found")
-
-        # Submit job
-        job = await self._submit_to_framework(request)
-        return job
-
-    except Exception as e:
-        # Log error and create failed job
-        logger.exception(f"Failed to submit evaluation: {e}")
-        job = self._create_failed_job(str(e))
-        return job
-```
-
-### 2. Progress Tracking
-
-```python
-async def _run_evaluation(self, job_id: str):
-    job = self._jobs[job_id]
-
-    try:
-        job.status = JobStatus.RUNNING
-        job.started_at = datetime.now(timezone.utc)
-
-        # Step 1: Load model
-        job.progress = 0.1
-        job.current_step = "Loading model"
-        await self._load_model(job.request.model)
-
-        # Step 2: Load dataset
-        job.progress = 0.2
-        job.current_step = "Loading dataset"
-        dataset = await self._load_dataset(job.request.benchmark_id)
-
-        # Step 3: Run evaluation
-        for i, batch in enumerate(dataset.batches):
-            job.progress = 0.2 + 0.7 * (i / len(dataset.batches))
-            job.current_step = f"Evaluating batch {i+1}/{len(dataset.batches)}"
-            await self._evaluate_batch(batch)
-
-        # Step 4: Compute metrics
-        job.progress = 0.9
-        job.current_step = "Computing metrics"
-        results = await self._compute_metrics()
-
-        job.status = JobStatus.COMPLETED
-        job.progress = 1.0
-        job.completed_at = datetime.now(timezone.utc)
-
-    except Exception as e:
-        job.status = JobStatus.FAILED
-        job.error_message = str(e)
-```
-
-### 3. Resource Management
-
-```python
-async def initialize(self):
-    # Check available resources
-    if torch.cuda.is_available():
-        self.device = "cuda"
-        self.max_batch_size = 32
-    else:
-        self.device = "cpu"
-        self.max_batch_size = 8
-
-    # Initialize model cache
-    self.model_cache = {}
-
-    # Set up cleanup
-    atexit.register(self._cleanup_resources)
-
-async def _cleanup_resources(self):
-    # Clear model cache
-    for model in self.model_cache.values():
-        del model
-
-    # Free GPU memory
-    if self.device == "cuda":
-        torch.cuda.empty_cache()
-```
-
 ## Contributing
 
 1. Fork the repository
@@ -684,15 +568,3 @@ async def _cleanup_resources(self):
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-- **Documentation**: [https://trustyai.org/docs](https://trustyai.org/docs)
-- **Issues**: [GitHub Issues](https://github.com/trustyai-explainability/trustyai-service/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/trustyai-explainability/trustyai-service/discussions)
-
-## Related Projects
-
-- **TrustyAI EvalHub**: The main evaluation orchestration platform
-- **TrustyAI Service**: AI explainability and bias detection service
-- **OpenShift AI**: Red Hat's AI/ML platform
