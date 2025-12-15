@@ -3,9 +3,11 @@
 import logging
 import signal
 import sys
-from typing import Optional
+from typing import Any
 
+# typing imports removed - using PEP 604 union syntax
 import uvicorn
+from fastapi import FastAPI
 
 from ..api.router import AdapterAPIRouter
 from ..models.framework import AdapterConfig, FrameworkAdapter
@@ -27,7 +29,7 @@ class AdapterServer:
         self.app = self.router.get_app()
         self._setup_logging()
 
-    def _setup_logging(self):
+    def _setup_logging(self) -> None:
         """Set up logging configuration."""
         logging.basicConfig(
             level=getattr(logging, self.adapter.config.log_level.upper()),
@@ -37,12 +39,12 @@ class AdapterServer:
 
     def run(
         self,
-        host: Optional[str] = None,
-        port: Optional[int] = None,
-        workers: Optional[int] = None,
+        host: str | None = None,
+        port: int | None = None,
+        workers: int | None = None,
         reload: bool = False,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """Run the adapter server.
 
         Args:
@@ -84,10 +86,10 @@ class AdapterServer:
             logger.exception(f"Server error: {e}")
             sys.exit(1)
 
-    def _setup_signal_handlers(self):
+    def _setup_signal_handlers(self) -> None:
         """Set up signal handlers for graceful shutdown."""
 
-        def signal_handler(signum, frame):
+        def signal_handler(signum: int, frame: Any) -> None:
             logger.info(f"Received signal {signum}, initiating shutdown...")
             # The adapter shutdown will be handled by FastAPI's shutdown event
             sys.exit(0)
@@ -96,8 +98,8 @@ class AdapterServer:
         signal.signal(signal.SIGTERM, signal_handler)
 
     async def run_async(
-        self, host: Optional[str] = None, port: Optional[int] = None, **kwargs
-    ):
+        self, host: str | None = None, port: int | None = None, **kwargs: Any
+    ) -> None:
         """Run the server asynchronously.
 
         Useful for embedding the server in other applications.
@@ -128,7 +130,25 @@ class AdapterServer:
             raise
 
 
-def run_adapter_server(adapter_class, config: AdapterConfig, **server_kwargs):
+def create_adapter_app(adapter: FrameworkAdapter) -> FastAPI:
+    """Create a FastAPI application for the given adapter.
+
+    This function creates a FastAPI app configured with the adapter's API router.
+    Useful for testing and embedding the adapter in other applications.
+
+    Args:
+        adapter: The framework adapter instance
+
+    Returns:
+        FastAPI application instance
+    """
+    router = AdapterAPIRouter(adapter)
+    return router.get_app()
+
+
+def run_adapter_server(
+    adapter_class: type[FrameworkAdapter], config: AdapterConfig, **server_kwargs: Any
+) -> None:
     """Convenience function to create and run an adapter server.
 
     Args:

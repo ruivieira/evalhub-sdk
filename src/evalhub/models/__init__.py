@@ -15,12 +15,6 @@ from .api import (
     JobStatus,
     ModelConfig,
 )
-from .framework import (
-    AdapterConfig,
-    AdapterMetadata,
-    # Framework adapter models
-    FrameworkAdapter,
-)
 
 __all__ = [
     # API models
@@ -35,8 +29,4 @@ __all__ = [
     "EvaluationStatus",
     "ErrorResponse",
     "HealthResponse",
-    # Framework models
-    "FrameworkAdapter",
-    "AdapterConfig",
-    "AdapterMetadata",
 ]

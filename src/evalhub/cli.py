@@ -4,16 +4,16 @@ import asyncio
 import importlib
 import sys
 from pathlib import Path
-from typing import Optional
 
+# typing imports removed - using PEP 604 union syntax
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from .client import AdapterClient, AdapterDiscovery
-from .models import AdapterConfig
-from .server import run_adapter_server
+from .adapter.client import AdapterClient, AdapterDiscovery
+from .adapter.models import AdapterConfig
+from .adapter.server import run_adapter_server
 
 app = typer.Typer(
     name="evalhub-adapter",
@@ -22,6 +22,7 @@ app = typer.Typer(
 )
 
 console = Console()
+err_console = Console(file=sys.stderr)
 
 
 @app.command()
@@ -30,7 +31,7 @@ def run(
         ...,
         help="Python module path to your adapter class (e.g., 'my_adapter:MyAdapter')",
     ),
-    config_file: Optional[Path] = typer.Option(
+    config_file: Path | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -42,7 +43,7 @@ def run(
     workers: int = typer.Option(1, help="Number of worker processes"),
     reload: bool = typer.Option(False, help="Enable auto-reload for development"),
     log_level: str = typer.Option("INFO", help="Log level"),
-):
+) -> None:
     """Run a framework adapter server.
 
     Example:
@@ -51,9 +52,8 @@ def run(
     try:
         # Parse adapter module and class
         if ":" not in adapter_module:
-            console.print(
-                "[red]Error:[/red] Adapter module must be in format 'module:class'",
-                file=sys.stderr,
+            err_console.print(
+                "[red]Error:[/red] Adapter module must be in format 'module:class'"
             )
             raise typer.Exit(1)
 
@@ -64,15 +64,11 @@ def run(
             module = importlib.import_module(module_path)
             adapter_class = getattr(module, class_name)
         except ImportError as e:
-            console.print(
-                f"[red]Error:[/red] Failed to import {module_path}: {e}",
-                file=sys.stderr,
-            )
+            err_console.print(f"[red]Error:[/red] Failed to import {module_path}: {e}")
             raise typer.Exit(1)
         except AttributeError:
-            console.print(
-                f"[red]Error:[/red] Class {class_name} not found in {module_path}",
-                file=sys.stderr,
+            err_console.print(
+                f"[red]Error:[/red] Class {class_name} not found in {module_path}"
             )
             raise typer.Exit(1)
 
@@ -80,10 +76,16 @@ def run(
         config = AdapterConfig(
             framework_id="custom_framework",  # Default, should be overridden
             adapter_name="Custom Framework Adapter",
+            version="1.0.0",
             host=host,
             port=port,
             workers=workers,
+            max_concurrent_jobs=5,
+            job_timeout_seconds=3600,
+            memory_limit_gb=None,
             log_level=log_level.upper(),
+            enable_metrics=True,
+            health_check_interval=30,
         )
 
         if config_file:
@@ -119,17 +121,17 @@ def run(
     except KeyboardInterrupt:
         console.print("\n[yellow]Server stopped by user[/yellow]")
     except Exception as e:
-        console.print(f"[red]Error:[/red] {e}", file=sys.stderr)
+        err_console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
 
 
 @app.command()
 def info(
     url: str = typer.Argument(..., help="Adapter URL (e.g., http://localhost:8080)")
-):
+) -> None:
     """Get information about a framework adapter."""
 
-    async def get_info():
+    async def get_info() -> None:
         try:
             async with AdapterClient(url) as client:
                 # Get framework info
@@ -177,9 +179,7 @@ def info(
                         )
 
         except Exception as e:
-            console.print(
-                f"[red]Error:[/red] Failed to get adapter info: {e}", file=sys.stderr
-            )
+            err_console.print(f"[red]Error:[/red] Failed to get adapter info: {e}")
             raise typer.Exit(1)
 
     asyncio.run(get_info())
@@ -188,10 +188,10 @@ def info(
 @app.command()
 def health(
     url: str = typer.Argument(..., help="Adapter URL (e.g., http://localhost:8080)")
-):
+) -> None:
     """Check the health of a framework adapter."""
 
-    async def check_health():
+    async def check_health() -> None:
         try:
             async with AdapterClient(url) as client:
                 health_response = await client.health_check()
@@ -240,9 +240,7 @@ def health(
                     console.print(table)
 
         except Exception as e:
-            console.print(
-                f"[red]Error:[/red] Failed to check health: {e}", file=sys.stderr
-            )
+            err_console.print(f"[red]Error:[/red] Failed to check health: {e}")
             raise typer.Exit(1)
 
     asyncio.run(check_health())
@@ -254,10 +252,10 @@ def discover(
         ...,
         help="Adapter URLs to discover (e.g., http://localhost:8080 http://localhost:8081)",
     ),
-):
+) -> None:
     """Discover and display information about multiple adapters."""
 
-    async def discover_adapters():
+    async def discover_adapters() -> None:
         discovery = AdapterDiscovery()
 
         console.print("[blue]Discovering adapters...[/blue]")
@@ -320,13 +318,11 @@ def load_config(config_file: Path, base_config: AdapterConfig) -> AdapterConfig:
         return base_config.model_copy(update=config_data)
 
     except Exception as e:
-        console.print(
-            f"[red]Error:[/red] Failed to load config file: {e}", file=sys.stderr
-        )
+        err_console.print(f"[red]Error:[/red] Failed to load config file: {e}")
         raise typer.Exit(1)
 
 
-def main():
+def main() -> None:
     """Main entry point for the CLI."""
     app()
 

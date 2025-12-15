@@ -5,15 +5,19 @@ LightEval is a lightweight evaluation framework for language models.
 """
 
 import asyncio
+
+# LightEval imports - simplified for demo
+import importlib.util
 import json
 import logging
 import tempfile
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-from evalhub_sdk.models.api import (
+from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
+from evalhub.models.api import (
     BenchmarkInfo,
     EvaluationJob,
     EvaluationRequest,
@@ -22,16 +26,10 @@ from evalhub_sdk.models.api import (
     FrameworkInfo,
     HealthResponse,
     JobStatus,
+    ModelConfig,
 )
-from evalhub_sdk.models.framework import AdapterConfig, FrameworkAdapter
 
-# LightEval imports - simplified for demo
-try:
-    import lighteval
-
-    LIGHTEVAL_AVAILABLE = True
-except ImportError:
-    LIGHTEVAL_AVAILABLE = False
+LIGHTEVAL_AVAILABLE = importlib.util.find_spec("lighteval") is not None
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +149,7 @@ class LightEvalAdapter(FrameworkAdapter):
         """List available LightEval benchmarks."""
         return list(self._available_tasks.values())
 
-    async def get_benchmark_info(self, benchmark_id: str) -> Optional[BenchmarkInfo]:
+    async def get_benchmark_info(self, benchmark_id: str) -> BenchmarkInfo | None:
         """Get information about a specific benchmark."""
         return self._available_tasks.get(benchmark_id)
 
@@ -256,7 +254,7 @@ class LightEvalAdapter(FrameworkAdapter):
             "system_prompt": None,
         }
 
-    def _create_model_config(self, model_config) -> dict[str, Any]:
+    def _create_model_config(self, model_config: ModelConfig) -> dict[str, Any]:
         """Create LightEval model configuration."""
         # Map EvalHub model config to LightEval format
         lighteval_config = {
@@ -285,7 +283,7 @@ class LightEvalAdapter(FrameworkAdapter):
         config_path: str,
         model_config: dict[str, Any],
         benchmark_id: str,
-        num_examples: Optional[int],
+        num_examples: int | None,
     ) -> dict[str, Any]:
         """Execute LightEval evaluation."""
         # This is a simplified version - in a real implementation,
@@ -358,11 +356,11 @@ class LightEvalAdapter(FrameworkAdapter):
             duration_seconds=120.0,  # Mock duration
         )
 
-    async def get_job_status(self, job_id: str) -> Optional[EvaluationJob]:
+    async def get_job_status(self, job_id: str) -> EvaluationJob | None:
         """Get the status of an evaluation job."""
         return self._jobs.get(job_id)
 
-    async def get_evaluation_results(self, job_id: str) -> Optional[EvaluationResponse]:
+    async def get_evaluation_results(self, job_id: str) -> EvaluationResponse | None:
         """Get the results of a completed evaluation."""
         if job_id not in self._jobs:
             return None
@@ -442,7 +440,7 @@ def create_lighteval_adapter() -> LightEvalAdapter:
 if __name__ == "__main__":
     import sys
 
-    from evalhub_sdk.server.app import AdapterServer
+    from evalhub.adapter.server.app import AdapterServer
 
     # Create adapter
     adapter = create_lighteval_adapter()

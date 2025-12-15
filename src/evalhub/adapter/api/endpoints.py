@@ -1,12 +1,12 @@
 """Standard API endpoints for framework adapters."""
 
 import logging
-from typing import Optional
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..models.api import (
+from ...models.api import (
     BenchmarkInfo,
     EvaluationJob,
     EvaluationRequest,
@@ -32,7 +32,8 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
     router = APIRouter()
 
     @router.get("/health", response_model=HealthResponse, tags=["Health"])
-    async def health_check():
+    @router.options("/health", tags=["Health"])
+    async def health_check() -> HealthResponse:
         """Check the health of the framework adapter."""
         try:
             return await adapter.health_check()
@@ -43,7 +44,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
             )
 
     @router.get("/info", response_model=FrameworkInfo, tags=["Info"])
-    async def get_framework_info():
+    async def get_framework_info() -> FrameworkInfo:
         """Get information about the framework adapter."""
         try:
             return await adapter.get_framework_info()
@@ -54,7 +55,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
             )
 
     @router.get("/benchmarks", response_model=list[BenchmarkInfo], tags=["Benchmarks"])
-    async def list_benchmarks():
+    async def list_benchmarks() -> list[BenchmarkInfo]:
         """List all available benchmarks."""
         try:
             return await adapter.list_benchmarks()
@@ -67,7 +68,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
     @router.get(
         "/benchmarks/{benchmark_id}", response_model=BenchmarkInfo, tags=["Benchmarks"]
     )
-    async def get_benchmark_info(benchmark_id: str):
+    async def get_benchmark_info(benchmark_id: str) -> BenchmarkInfo:
         """Get detailed information about a specific benchmark."""
         try:
             benchmark_info = await adapter.get_benchmark_info(benchmark_id)
@@ -84,10 +85,15 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
                 status_code=500, detail=f"Failed to get benchmark info: {str(e)}"
             )
 
-    @router.post("/evaluations", response_model=EvaluationJob, tags=["Evaluations"])
+    @router.post(
+        "/evaluations",
+        response_model=EvaluationJob,
+        status_code=201,
+        tags=["Evaluations"],
+    )
     async def submit_evaluation(
         request: EvaluationRequest, background_tasks: BackgroundTasks
-    ):
+    ) -> EvaluationJob:
         """Submit an evaluation job."""
         try:
             # Validate the request
@@ -121,7 +127,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
     @router.get(
         "/evaluations/{job_id}", response_model=EvaluationJob, tags=["Evaluations"]
     )
-    async def get_job_status(job_id: str):
+    async def get_job_status(job_id: str) -> EvaluationJob:
         """Get the status of an evaluation job."""
         try:
             job = await adapter.get_job_status(job_id)
@@ -141,7 +147,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
         response_model=EvaluationResponse,
         tags=["Evaluations"],
     )
-    async def get_evaluation_results(job_id: str):
+    async def get_evaluation_results(job_id: str) -> EvaluationResponse:
         """Get the results of a completed evaluation."""
         try:
             # First check if job exists
@@ -186,7 +192,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
             )
 
     @router.delete("/evaluations/{job_id}", tags=["Evaluations"])
-    async def cancel_job(job_id: str):
+    async def cancel_job(job_id: str) -> dict[str, bool | str]:
         """Cancel an evaluation job."""
         try:
             success = await adapter.cancel_job(job_id)
@@ -203,7 +209,10 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
                         detail=f"Job '{job_id}' cannot be cancelled (status: {job.status})",
                     )
 
-            return {"message": f"Job '{job_id}' cancelled successfully"}
+            return {
+                "success": True,
+                "message": f"Job '{job_id}' cancelled successfully",
+            }
 
         except HTTPException:
             raise
@@ -217,8 +226,8 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
         "/evaluations", response_model=list[EvaluationJob], tags=["Evaluations"]
     )
     async def list_jobs(
-        status: Optional[JobStatus] = None, limit: Optional[int] = None
-    ):
+        status: JobStatus | None = None, limit: int | None = None
+    ) -> list[EvaluationJob]:
         """List evaluation jobs, optionally filtered by status."""
         try:
             jobs = await adapter.list_active_jobs()
@@ -244,7 +253,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
         response_class=StreamingResponse,
         tags=["Evaluations"],
     )
-    async def stream_job_updates(job_id: str):
+    async def stream_job_updates(job_id: str) -> StreamingResponse:
         """Stream real-time updates for an evaluation job."""
         try:
             # Check if job exists
@@ -252,7 +261,7 @@ def create_adapter_api(adapter: FrameworkAdapter) -> APIRouter:
             if not job:
                 raise HTTPException(status_code=404, detail=f"Job '{job_id}' not found")
 
-            async def event_stream():
+            async def event_stream() -> AsyncGenerator[str, None]:
                 """Generate Server-Sent Events for job updates."""
                 async for updated_job in adapter.stream_job_updates(job_id):
                     # Format as Server-Sent Event

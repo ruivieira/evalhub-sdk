@@ -3,9 +3,9 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
-from ..models.api import FrameworkInfo, HealthResponse
+# typing imports removed - using PEP 604 union syntax
+from ...models.api import FrameworkInfo, HealthResponse
 from .adapter_client import AdapterClient
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,9 @@ class AdapterEndpoint:
     name: str
     version: str
     status: str  # "healthy", "unhealthy", "unreachable"
-    last_checked: Optional[float] = None
-    framework_info: Optional[FrameworkInfo] = None
-    health_info: Optional[HealthResponse] = None
+    last_checked: float | None = None
+    framework_info: FrameworkInfo | None = None
+    health_info: HealthResponse | None = None
 
 
 class AdapterDiscovery:
@@ -32,14 +32,14 @@ class AdapterDiscovery:
     and route requests to the appropriate adapter.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the discovery service."""
         self._adapters: dict[str, AdapterEndpoint] = {}
         self._check_interval = 30.0  # Health check interval in seconds
         self._running = False
-        self._health_check_task: Optional[asyncio.Task] = None
+        self._health_check_task: asyncio.Task | None = None
 
-    def register_adapter(self, url: str, framework_id: Optional[str] = None) -> None:
+    def register_adapter(self, url: str, framework_id: str | None = None) -> None:
         """Manually register a framework adapter.
 
         Args:
@@ -72,7 +72,7 @@ class AdapterDiscovery:
             return True
         return False
 
-    async def discover_adapter(self, url: str) -> Optional[AdapterEndpoint]:
+    async def discover_adapter(self, url: str) -> AdapterEndpoint | None:
         """Discover information about an adapter at the given URL.
 
         Args:
@@ -181,7 +181,7 @@ class AdapterDiscovery:
                 self.register_adapter(url, framework_id)
 
     def get_adapters(
-        self, status: Optional[str] = None, framework_id: Optional[str] = None
+        self, status: str | None = None, framework_id: str | None = None
     ) -> list[AdapterEndpoint]:
         """Get list of registered adapters.
 
@@ -202,7 +202,7 @@ class AdapterDiscovery:
 
         return adapters
 
-    def get_adapter_for_framework(self, framework_id: str) -> Optional[AdapterEndpoint]:
+    def get_adapter_for_framework(self, framework_id: str) -> AdapterEndpoint | None:
         """Get a healthy adapter for a specific framework.
 
         Args:
@@ -225,7 +225,7 @@ class AdapterDiscovery:
         """
         return [a for a in self._adapters.values() if a.status == "healthy"]
 
-    async def start_health_monitoring(self, interval: Optional[float] = None) -> None:
+    async def start_health_monitoring(self, interval: float | None = None) -> None:
         """Start continuous health monitoring of adapters.
 
         Args:

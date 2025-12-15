@@ -1,10 +1,11 @@
 """Unit tests for FrameworkAdapter."""
 
 from datetime import datetime, timezone
-from typing import Optional
 
+# typing imports removed - using PEP 604 union syntax
 import pytest
-from evalhub_sdk.models.api import (
+from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
+from evalhub.models.api import (
     BenchmarkInfo,
     EvaluationJob,
     EvaluationRequest,
@@ -15,7 +16,6 @@ from evalhub_sdk.models.api import (
     JobStatus,
     ModelConfig,
 )
-from evalhub_sdk.models.framework import AdapterConfig, FrameworkAdapter
 
 
 class MockFrameworkAdapter(FrameworkAdapter):
@@ -55,7 +55,7 @@ class MockFrameworkAdapter(FrameworkAdapter):
         """List available benchmarks."""
         return self._benchmarks.copy()
 
-    async def get_benchmark_info(self, benchmark_id: str) -> Optional[BenchmarkInfo]:
+    async def get_benchmark_info(self, benchmark_id: str) -> BenchmarkInfo | None:
         """Get benchmark information."""
         for benchmark in self._benchmarks:
             if benchmark.benchmark_id == benchmark_id:
@@ -77,11 +77,11 @@ class MockFrameworkAdapter(FrameworkAdapter):
         self._jobs[job_id] = job
         return job
 
-    async def get_job_status(self, job_id: str) -> Optional[EvaluationJob]:
+    async def get_job_status(self, job_id: str) -> EvaluationJob | None:
         """Get job status."""
         return self._jobs.get(job_id)
 
-    async def get_evaluation_results(self, job_id: str) -> Optional[EvaluationResponse]:
+    async def get_evaluation_results(self, job_id: str) -> EvaluationResponse | None:
         """Get evaluation results."""
         job = self._jobs.get(job_id)
         if not job or job.status != JobStatus.COMPLETED:

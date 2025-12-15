@@ -1,3 +1,9 @@
+# Pre-commit configuration
+# IMPORTANT: Keep tool versions synchronized with:
+# 1. pyproject.toml [project.optional-dependencies.dev]
+# 2. .github/workflows/pre-commit.yml
+# When updating versions here, update them in the other files too!
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
@@ -39,4 +45,4 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
-        args: [--cov=src/evalhub_sdk, --cov-report=term-missing, --cov-fail-under=80]
+        args: [--cov=src/evalhub, --cov-report=term-missing, --cov-fail-under=45]

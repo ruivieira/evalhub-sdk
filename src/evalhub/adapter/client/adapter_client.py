@@ -2,11 +2,12 @@
 
 import logging
 from collections.abc import AsyncGenerator
-from typing import Optional
+from typing import Any
 
+# typing imports removed - using PEP 604 union syntax
 import httpx
 
-from ..models.api import (
+from ...models.api import (
     BenchmarkInfo,
     EvaluationJob,
     EvaluationRequest,
@@ -17,6 +18,14 @@ from ..models.api import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class ClientError(Exception):
+    """Base exception for client errors."""
+
+    def __init__(self, message: str, cause: Exception | None = None) -> None:
+        super().__init__(message)
+        self.cause = cause
 
 
 class AdapterClient:
@@ -44,19 +53,24 @@ class AdapterClient:
 
         self.max_retries = max_retries
 
-    async def close(self):
+    async def close(self) -> None:
         """Close the HTTP client."""
         await self._client.aclose()
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "AdapterClient":
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: Any,
+    ) -> None:
         """Async context manager exit."""
         await self.close()
 
-    async def _request(self, method: str, path: str, **kwargs) -> httpx.Response:
+    async def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         """Make HTTP request with retry logic.
 
         Args:
@@ -105,6 +119,9 @@ class AdapterClient:
                 logger.warning(
                     f"Connection error to {url}, retrying ({attempt + 1}/{self.max_retries}): {e}"
                 )
+
+        # This should never be reached, but mypy needs a return
+        raise RuntimeError("Request retry loop completed without returning")
 
     # Health and Info endpoints
 
@@ -234,7 +251,7 @@ class AdapterClient:
                 raise
 
     async def list_jobs(
-        self, status: Optional[JobStatus] = None, limit: Optional[int] = None
+        self, status: JobStatus | None = None, limit: int | None = None
     ) -> list[EvaluationJob]:
         """List evaluation jobs.
 
@@ -252,7 +269,7 @@ class AdapterClient:
         if status:
             params["status"] = status.value
         if limit:
-            params["limit"] = limit
+            params["limit"] = str(limit)
 
         response = await self._request("GET", "/evaluations", params=params)
         return [EvaluationJob(**job) for job in response.json()]
@@ -282,7 +299,9 @@ class AdapterClient:
                         data = line[6:]  # Remove "data: " prefix
                         if data.strip():
                             try:
-                                job_data = httpx._content.json_loads(data)
+                                import json
+
+                                job_data = json.loads(data)
                                 yield EvaluationJob(**job_data)
                             except Exception as e:
                                 logger.warning(f"Failed to parse streaming data: {e}")
@@ -292,7 +311,8 @@ class AdapterClient:
             logger.info(
                 f"Streaming not available for {job_id}, falling back to polling"
             )
-            await self._poll_job_updates(job_id)
+            async for job_update in self._poll_job_updates(job_id):
+                yield job_update
 
     async def _poll_job_updates(
         self, job_id: str, interval: float = 2.0
@@ -329,7 +349,7 @@ class AdapterClient:
                     raise
 
     async def wait_for_completion(
-        self, job_id: str, timeout: Optional[float] = None, poll_interval: float = 5.0
+        self, job_id: str, timeout: float | None = None, poll_interval: float = 5.0
     ) -> EvaluationJob:
         """Wait for an evaluation job to complete.
 

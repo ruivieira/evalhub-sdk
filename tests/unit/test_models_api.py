@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
-from evalhub_sdk.models.api import (
+from evalhub.models.api import (
     BenchmarkInfo,
     ErrorResponse,
     EvaluationJob,

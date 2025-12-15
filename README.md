@@ -27,13 +27,32 @@ graph LR
     FA --> API
 ```
 
+### Package Organization
+
+The SDK is organized into distinct, focused packages:
+
+**🏗️ Core (`evalhub.models`)** - Shared data models and utilities
+- Request/response models for API communication
+- Common data structures used by both clients and adapters
+
+**🔧 Adapter SDK (`evalhub.adapter`)** - Components for building framework adapters
+- Framework adapter base class and configuration
+- Server components for hosting your adapter
+- API routing and endpoint implementations
+- CLI tools for running and managing adapters
+
+**📡 Client SDK (`evalhub.adapter.client`)** - Components for communicating with adapters
+- HTTP client for connecting to framework adapters
+- Discovery service for finding and managing multiple adapters
+- Async communication patterns
+
 ### Key Components
 
 1. **Standard API**: Common REST endpoints that all adapters must implement
-2. **Framework Adapter Base Class**: Abstract base class with the adapter contract
-3. **Server Components**: FastAPI-based server for exposing the standard API
-4. **Client Components**: HTTP client for EvalHub to communicate with adapters
-5. **Data Models**: Pydantic models for requests, responses, and metadata
+2. **Framework Adapter Base Class**: Abstract base class with the adapter contract (`evalhub.adapter.models`)
+3. **Server Components**: FastAPI-based server for exposing the standard API (`evalhub.adapter.server`)
+4. **Client Components**: HTTP client for EvalHub to communicate with adapters (`evalhub.adapter.client`)
+5. **Data Models**: Pydantic models for requests, responses, and metadata (`evalhub.models`)
 
 ## Quick Start
 
@@ -55,8 +74,8 @@ Create a new Python file for your adapter:
 
 ```python
 # my_framework_adapter.py
-from evalhub_sdk import FrameworkAdapter, AdapterConfig, BenchmarkInfo
-from evalhub_sdk.models import *
+from evalhub.adapter import FrameworkAdapter, AdapterConfig
+from evalhub.models import *
 
 class MyFrameworkAdapter(FrameworkAdapter):
     async def initialize(self):
@@ -90,7 +109,7 @@ class MyFrameworkAdapter(FrameworkAdapter):
 
 ```python
 # run_adapter.py
-from evalhub_sdk import AdapterServer, AdapterConfig
+from evalhub.adapter import AdapterServer, AdapterConfig
 from my_framework_adapter import MyFrameworkAdapter
 
 config = AdapterConfig(
@@ -118,6 +137,47 @@ curl http://localhost:8080/api/v1/info
 
 # List benchmarks
 curl http://localhost:8080/api/v1/benchmarks
+```
+
+## Package Organization Guide
+
+The EvalHub SDK is organized into distinct packages based on your use case:
+
+### 📦 **Which Package Should I Use?**
+
+| Use Case | Primary Package | Description |
+|----------|----------------|-------------|
+| **Building an Adapter** | `evalhub.adapter` | You're creating a new framework adapter |
+| **Connecting to Adapters** | `evalhub.adapter.client` | You're building a client to communicate with adapters |
+| **Data Models** | `evalhub.models` | You need request/response models for API communication |
+| **CLI Tools** | `evalhub.adapter.cli` | You want to run/manage adapters from command line |
+
+### 🎯 **Import Patterns by Role**
+
+**Framework Adapter Developer:**
+```python
+# Building your adapter
+from evalhub.adapter.models import FrameworkAdapter, AdapterConfig
+from evalhub.adapter.server import AdapterServer
+from evalhub.models.api import EvaluationRequest, EvaluationJob
+
+# Running your adapter
+from evalhub.adapter import *  # Everything you need
+```
+
+**Client Developer (EvalHub team):**
+```python
+# Communicating with adapters
+from evalhub.adapter.client import AdapterClient, AdapterDiscovery
+from evalhub.models.api import EvaluationRequest, ModelConfig
+```
+
+**Integration Developer:**
+```python
+# Using both sides of the API
+from evalhub.adapter.client import AdapterClient        # Client side
+from evalhub.adapter.models import FrameworkAdapter      # Adapter side
+from evalhub.models.api import *                         # Shared models
 ```
 
 ## Complete Examples
@@ -302,7 +362,8 @@ evalhub-adapter discover http://adapter1:8080 http://adapter2:8081
 EvalHub uses the provided client to communicate with adapters:
 
 ```python
-from evalhub_sdk import AdapterClient, EvaluationRequest, ModelConfig
+from evalhub.adapter.client import AdapterClient
+from evalhub.models import EvaluationRequest, ModelConfig
 
 async with AdapterClient("http://adapter:8080") as client:
     # Get framework info
@@ -341,7 +402,7 @@ async with AdapterClient("http://adapter:8080") as client:
 EvalHub can automatically discover and manage multiple adapters:
 
 ```python
-from evalhub_sdk import AdapterDiscovery
+from evalhub.adapter.client import AdapterDiscovery
 
 discovery = AdapterDiscovery()
 
@@ -465,23 +526,52 @@ podman rm your-adapter
 
 ### Project Structure
 
-The SDK uses a modern Python project structure:
+The SDK uses a modern Python project structure with clear separation of concerns:
 
 ```
 evalhub-sdk/
-├── src/evalhub_sdk/     # Source code (src layout)
-│   ├── api/             # API endpoints and routing
-│   ├── client/          # HTTP client for EvalHub
-│   ├── models/          # Pydantic data models
-│   ├── server/          # FastAPI server components
-│   └── utils/           # Utilities and helpers
-├── tests/               # Test suite
-│   ├── unit/            # Unit tests
-│   └── integration/     # Integration tests
-├── examples/            # Example adapters
+├── src/evalhub/          # Source code (src layout)
+│   ├── models/           # 🏗️ Core: Shared data models
+│   │   ├── api.py        #    Request/response models
+│   │   └── __init__.py
+│   ├── adapter/          # 🔧 Adapter SDK: Framework adapter components
+│   │   ├── models/       #    Adapter-specific models (FrameworkAdapter, AdapterConfig)
+│   │   ├── server/       #    FastAPI server for hosting adapters
+│   │   ├── api/          #    API endpoints and routing
+│   │   ├── client/       # 📡 Client SDK: Communication with adapters
+│   │   ├── cli.py        #    Command-line interface for adapters
+│   │   └── __init__.py
+│   ├── utils/            # 🛠️ Utilities and helpers
+│   ├── cli.py            # Main CLI interface
+│   └── __init__.py       # Public API exports
+├── tests/                # Test suite
+│   ├── unit/             # Unit tests
+│   └── integration/      # Integration tests
+├── examples/             # Example adapters
 │   ├── custom_framework_adapter.py
 │   └── lighteval_adapter/
-└── pyproject.toml       # Project configuration
+└── pyproject.toml        # Project configuration
+```
+
+### Package Usage Patterns
+
+**🏗️ Building an Adapter:**
+```python
+from evalhub.adapter import FrameworkAdapter, AdapterConfig, AdapterServer
+from evalhub.models import EvaluationRequest, EvaluationJob
+```
+
+**📡 Connecting to Adapters:**
+```python
+from evalhub.adapter.client import AdapterClient, AdapterDiscovery
+from evalhub.models import EvaluationRequest, ModelConfig
+```
+
+**🛠️ Framework Development:**
+```python
+# Access everything through the main package
+from evalhub.adapter import *  # All adapter components
+from evalhub.models import *   # All data models
 ```
 
 ### Development Setup
@@ -501,10 +591,10 @@ pre-commit install
 pytest
 
 # Run tests with coverage
-pytest --cov=src/evalhub_sdk --cov-report=html
+pytest --cov=src/evalhub --cov-report=html
 
 # Run type checking
-mypy src/evalhub_sdk
+mypy src/evalhub
 
 # Run linting
 ruff check src/ tests/
@@ -515,7 +605,7 @@ ruff format src/ tests/
 
 ```python
 import pytest
-from evalhub_sdk.client import AdapterClient
+from evalhub.adapter.client import AdapterClient
 
 @pytest.mark.asyncio
 async def test_adapter_health():
@@ -550,10 +640,10 @@ ruff format .
 ruff check --fix .
 
 # Type check
-mypy src/evalhub_sdk
+mypy src/evalhub
 
 # Run full test suite
-pytest -v --cov=src/evalhub_sdk
+pytest -v --cov=src/evalhub
 ```
 
 ## Contributing

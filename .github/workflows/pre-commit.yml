@@ -1,0 +1,73 @@
+name: Pre-commit
+
+# This workflow runs the same pre-commit hooks as configured in .pre-commit-config.yaml
+# IMPORTANT: Keep tool versions synchronized between:
+# 1. .pre-commit-config.yaml (rev fields)
+# 2. pyproject.toml (dev dependencies)
+# 3. This GitHub Actions workflow
+#
+# Version mapping:
+# - pre-commit-hooks: v4.5.0
+# - ruff-pre-commit: v0.1.6 -> ruff==0.1.6
+# - mirrors-mypy: v1.7.1 -> mypy==1.7.1
+# - pyproject.toml dev deps: pytest>=7.4.0, black>=23.0.0, etc.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install exact versions to match .pre-commit-config.yaml
+        pip install \
+          pytest==7.4.0 \
+          pytest-asyncio==0.21.0 \
+          pytest-cov==4.1.0 \
+          black==23.0.0 \
+          ruff==0.1.6 \
+          mypy==1.7.1 \
+          pre-commit==3.4.0
+
+        # Install project dependencies for mypy type checking
+        # (exact versions from .pre-commit-config.yaml mypy additional_dependencies)
+        pip install \
+          "pydantic>=2.0.0" \
+          "httpx>=0.25.0" \
+          "fastapi>=0.104.0" \
+          "uvicorn>=0.24.0" \
+          "typer>=0.9.0" \
+          "rich>=13.0.0" \
+          types-requests
+
+    - name: Cache pre-commit
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pre-commit
+        key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+    - name: Run pre-commit
+      run: |
+        # Use exact same versions as .pre-commit-config.yaml
+        pre-commit run --all-files
+      env:
+        # Ensure pre-commit uses the specific versions from config
+        PRE_COMMIT_HOME: ~/.cache/pre-commit
+
+    - name: Run tests with coverage
+      run: |
+        pytest --cov=src/evalhub --cov-report=term-missing --cov-fail-under=80

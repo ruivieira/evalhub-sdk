@@ -2,16 +2,18 @@
 
 
 import pytest
-from evalhub_sdk.models.api import (
+from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
+from evalhub.adapter.server.app import AdapterServer, create_adapter_app
+from evalhub.models.api import (
     BenchmarkInfo,
+    EvaluationJob,
     EvaluationRequest,
+    EvaluationResponse,
     FrameworkInfo,
     HealthResponse,
     JobStatus,
     ModelConfig,
 )
-from evalhub_sdk.models.framework import AdapterConfig, FrameworkAdapter
-from evalhub_sdk.server.app import AdapterServer, create_adapter_app
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -69,11 +71,11 @@ class MockAdapter(FrameworkAdapter):
             )
         return None
 
-    async def submit_evaluation(self, request: EvaluationRequest):
+    async def submit_evaluation(self, request: EvaluationRequest) -> EvaluationJob:
         """Submit evaluation job."""
         from datetime import datetime, timezone
 
-        from evalhub_sdk.models.api import EvaluationJob
+        from evalhub.models.api import EvaluationJob
 
         self._jobs_counter += 1
         job_id = f"mock_job_{self._jobs_counter}"
@@ -85,12 +87,12 @@ class MockAdapter(FrameworkAdapter):
             submitted_at=datetime.now(timezone.utc),
         )
 
-    async def get_job_status(self, job_id: str):
+    async def get_job_status(self, job_id: str) -> EvaluationJob | None:
         """Get job status."""
         if job_id.startswith("mock_job_"):
             from datetime import datetime, timezone
 
-            from evalhub_sdk.models.api import EvaluationJob
+            from evalhub.models.api import EvaluationJob
 
             return EvaluationJob(
                 job_id=job_id,
@@ -104,12 +106,12 @@ class MockAdapter(FrameworkAdapter):
             )
         return None
 
-    async def get_evaluation_results(self, job_id: str):
+    async def get_evaluation_results(self, job_id: str) -> EvaluationResponse | None:
         """Get evaluation results."""
         if job_id.startswith("mock_job_"):
             from datetime import datetime, timezone
 
-            from evalhub_sdk.models.api import EvaluationResponse, EvaluationResult
+            from evalhub.models.api import EvaluationResponse, EvaluationResult
 
             return EvaluationResponse(
                 job_id=job_id,
@@ -181,7 +183,7 @@ class TestAdapterServer:
         server = AdapterServer(mock_adapter)
 
         assert server.adapter == mock_adapter
-        assert server.config == adapter_config
+        assert server.adapter.config == adapter_config
         assert server.app is not None
 
     def test_health_endpoint(self, mock_adapter: MockAdapter) -> None:
@@ -361,7 +363,8 @@ class TestAdapterServer:
     @pytest.mark.asyncio
     async def test_startup_and_shutdown_events(self, mock_adapter: MockAdapter) -> None:
         """Test app startup and shutdown events."""
-        app = create_adapter_app(mock_adapter)
+        # Note: This test manually initializes the adapter rather than
+        # testing actual FastAPI startup/shutdown events
 
         # Simulate startup
         assert not mock_adapter._initialized
@@ -395,7 +398,7 @@ class TestAdapterServer:
         # Test with malformed JSON
         response = client.post(
             "/api/v1/evaluations",
-            data="invalid json",
+            content="invalid json",
             headers={"Content-Type": "application/json"},
         )
         assert response.status_code == 422
@@ -403,7 +406,7 @@ class TestAdapterServer:
         # Test with wrong content type
         response = client.post(
             "/api/v1/evaluations",
-            data="some data",
+            content="some data",
             headers={"Content-Type": "text/plain"},
         )
         assert response.status_code == 422

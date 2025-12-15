@@ -3,11 +3,11 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .api import (
+from ...models.api import (
     BenchmarkInfo,
     EvaluationJob,
     EvaluationRequest,
@@ -24,12 +24,12 @@ class AdapterConfig(BaseModel):
     # Adapter identification
     framework_id: str = Field(..., description="Unique framework identifier")
     adapter_name: str = Field(..., description="Adapter display name")
-    version: str = Field("1.0.0", description="Adapter version")
+    version: str = Field(default="1.0.0", description="Adapter version")
 
     # Server configuration
-    host: str = Field("0.0.0.0", description="Server host to bind to")
-    port: int = Field(8000, description="Server port")
-    workers: int = Field(1, description="Number of worker processes")
+    host: str = Field(default="0.0.0.0", description="Server host to bind to")
+    port: int = Field(default=8000, description="Server port")
+    workers: int = Field(default=1, description="Number of worker processes")
 
     # Framework-specific settings
     framework_config: dict[str, Any] = Field(
@@ -38,16 +38,20 @@ class AdapterConfig(BaseModel):
 
     # Resource limits
     max_concurrent_jobs: int = Field(
-        5, description="Maximum concurrent evaluation jobs"
+        default=10, description="Maximum concurrent evaluation jobs"
     )
-    job_timeout_seconds: int = Field(3600, description="Maximum job execution time")
-    memory_limit_gb: Optional[float] = Field(None, description="Memory limit in GB")
+    job_timeout_seconds: int = Field(
+        default=3600, description="Maximum job execution time"
+    )
+    memory_limit_gb: float | None = Field(
+        default=None, description="Memory limit in GB"
+    )
 
     # Logging and monitoring
-    log_level: str = Field("INFO", description="Logging level")
-    enable_metrics: bool = Field(True, description="Enable metrics collection")
+    log_level: str = Field(default="INFO", description="Logging level")
+    enable_metrics: bool = Field(default=True, description="Enable metrics collection")
     health_check_interval: int = Field(
-        30, description="Health check interval in seconds"
+        default=30, description="Health check interval in seconds"
     )
 
     class Config:
@@ -61,14 +65,14 @@ class AdapterMetadata(BaseModel):
 
     # Basic information
     name: str = Field(..., description="Adapter name")
-    description: Optional[str] = Field(None, description="Adapter description")
+    description: str | None = Field(None, description="Adapter description")
     version: str = Field(..., description="Adapter version")
-    author: Optional[str] = Field(None, description="Adapter author")
+    author: str | None = Field(None, description="Adapter author")
 
     # Framework information
     framework_name: str = Field(..., description="Name of the wrapped framework")
     framework_version: str = Field(..., description="Version of the wrapped framework")
-    framework_url: Optional[str] = Field(
+    framework_url: str | None = Field(
         None, description="Framework documentation/repository URL"
     )
 
@@ -88,17 +92,15 @@ class AdapterMetadata(BaseModel):
     )
 
     # Resource requirements
-    min_memory_gb: Optional[float] = Field(
-        None, description="Minimum memory requirement"
-    )
+    min_memory_gb: float | None = Field(None, description="Minimum memory requirement")
     requires_gpu: bool = Field(False, description="Requires GPU")
-    max_batch_size: Optional[int] = Field(None, description="Maximum batch size")
+    max_batch_size: int | None = Field(None, description="Maximum batch size")
 
     # Contact and documentation
-    contact_email: Optional[str] = Field(None, description="Contact email")
-    documentation_url: Optional[str] = Field(None, description="Documentation URL")
-    repository_url: Optional[str] = Field(None, description="Source repository URL")
-    license: Optional[str] = Field(None, description="License information")
+    contact_email: str | None = Field(None, description="Contact email")
+    documentation_url: str | None = Field(None, description="Documentation URL")
+    repository_url: str | None = Field(None, description="Source repository URL")
+    license: str | None = Field(None, description="License information")
 
 
 class FrameworkAdapter(ABC):
@@ -148,7 +150,7 @@ class FrameworkAdapter(ABC):
         pass
 
     @abstractmethod
-    async def get_benchmark_info(self, benchmark_id: str) -> Optional[BenchmarkInfo]:
+    async def get_benchmark_info(self, benchmark_id: str) -> BenchmarkInfo | None:
         """Get detailed information about a specific benchmark.
 
         Args:
@@ -176,7 +178,7 @@ class FrameworkAdapter(ABC):
         pass
 
     @abstractmethod
-    async def get_job_status(self, job_id: str) -> Optional[EvaluationJob]:
+    async def get_job_status(self, job_id: str) -> EvaluationJob | None:
         """Get the current status of an evaluation job.
 
         Args:
@@ -188,7 +190,7 @@ class FrameworkAdapter(ABC):
         pass
 
     @abstractmethod
-    async def get_evaluation_results(self, job_id: str) -> Optional[EvaluationResponse]:
+    async def get_evaluation_results(self, job_id: str) -> EvaluationResponse | None:
         """Get the results of a completed evaluation.
 
         Args:
@@ -321,4 +323,16 @@ class FrameworkAdapter(ABC):
             version=self.config.version,
             framework_name=self.config.framework_id,
             framework_version="unknown",
+            author=None,
+            framework_url=None,
+            supports_batch_evaluation=True,
+            supports_few_shot=True,
+            supports_custom_datasets=False,
+            min_memory_gb=None,
+            requires_gpu=False,
+            max_batch_size=None,
+            contact_email=None,
+            documentation_url=None,
+            repository_url=None,
+            license=None,
         )

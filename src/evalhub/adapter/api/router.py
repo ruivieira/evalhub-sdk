@@ -1,8 +1,9 @@
 """API router utilities for framework adapters."""
 
 import logging
+from typing import Any
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -23,8 +24,8 @@ class AdapterAPIRouter:
         """
         self.adapter = adapter
         self.app = FastAPI(
-            title=f"{adapter.config.adapter_name} API",
-            description=f"API for {adapter.config.framework_id} framework adapter",
+            title="EvalHub Framework Adapter",
+            description=f"{adapter.config.adapter_name} - API for {adapter.config.framework_id} framework adapter",
             version=adapter.config.version,
             docs_url="/docs",
             redoc_url="/redoc",
@@ -34,7 +35,7 @@ class AdapterAPIRouter:
         self._setup_exception_handlers()
         self._setup_events()
 
-    def _setup_middleware(self):
+    def _setup_middleware(self) -> None:
         """Set up middleware for the FastAPI app."""
         # CORS middleware
         self.app.add_middleware(
@@ -47,7 +48,7 @@ class AdapterAPIRouter:
 
         # Note: Request logging removed to avoid middleware compatibility issues
 
-    def _setup_routes(self):
+    def _setup_routes(self) -> None:
         """Set up API routes."""
         # Include the standard adapter endpoints
         api_router = create_adapter_api(self.adapter)
@@ -57,7 +58,7 @@ class AdapterAPIRouter:
 
         # Root endpoint
         @self.app.get("/", tags=["Root"])
-        async def root():
+        async def root() -> dict[str, str]:
             """Root endpoint with basic information."""
             framework_info = await self.adapter.get_framework_info()
             return {
@@ -68,11 +69,11 @@ class AdapterAPIRouter:
                 "health_check": "/api/v1/health",
             }
 
-    def _setup_exception_handlers(self):
+    def _setup_exception_handlers(self) -> None:
         """Set up global exception handlers."""
 
         @self.app.exception_handler(404)
-        async def not_found_handler(request, exc):
+        async def not_found_handler(request: Request, exc: Any) -> JSONResponse:
             return JSONResponse(
                 status_code=404,
                 content={
@@ -83,7 +84,7 @@ class AdapterAPIRouter:
             )
 
         @self.app.exception_handler(500)
-        async def internal_error_handler(request, exc):
+        async def internal_error_handler(request: Request, exc: Any) -> JSONResponse:
             logger.exception("Internal server error")
             return JSONResponse(
                 status_code=500,
@@ -93,18 +94,18 @@ class AdapterAPIRouter:
                 },
             )
 
-    def _setup_events(self):
+    def _setup_events(self) -> None:
         """Set up startup and shutdown event handlers."""
 
         @self.app.on_event("startup")
-        async def startup_event():
+        async def startup_event() -> None:
             await self.startup()
 
         @self.app.on_event("shutdown")
-        async def shutdown_event():
+        async def shutdown_event() -> None:
             await self.shutdown()
 
-    async def startup(self):
+    async def startup(self) -> None:
         """Startup handler for the API server."""
         try:
             await self.adapter.initialize()
@@ -115,7 +116,7 @@ class AdapterAPIRouter:
             logger.exception("Failed to initialize framework adapter")
             raise
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """Shutdown handler for the API server."""
         try:
             await self.adapter.shutdown()

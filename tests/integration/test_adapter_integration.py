@@ -1,11 +1,13 @@
 """Integration tests for adapter functionality."""
 
 from datetime import datetime, timezone
-from typing import Optional
 
+# typing imports removed - using PEP 604 union syntax
 import pytest
-from evalhub_sdk.client.adapter_client import AdapterClient
-from evalhub_sdk.models.api import (
+from evalhub.adapter.client.adapter_client import AdapterClient
+from evalhub.adapter.models.framework import AdapterConfig, FrameworkAdapter
+from evalhub.adapter.server.app import create_adapter_app
+from evalhub.models.api import (
     BenchmarkInfo,
     EvaluationJob,
     EvaluationRequest,
@@ -15,8 +17,6 @@ from evalhub_sdk.models.api import (
     HealthResponse,
     JobStatus,
 )
-from evalhub_sdk.models.framework import AdapterConfig, FrameworkAdapter
-from evalhub_sdk.server.app import create_adapter_app
 from fastapi.testclient import TestClient
 
 
@@ -64,7 +64,7 @@ class IntegrationTestAdapter(FrameworkAdapter):
         """List available benchmarks."""
         return self._benchmarks.copy()
 
-    async def get_benchmark_info(self, benchmark_id: str) -> Optional[BenchmarkInfo]:
+    async def get_benchmark_info(self, benchmark_id: str) -> BenchmarkInfo | None:
         """Get benchmark information."""
         for benchmark in self._benchmarks:
             if benchmark.benchmark_id == benchmark_id:
@@ -86,11 +86,11 @@ class IntegrationTestAdapter(FrameworkAdapter):
         self._jobs[job_id] = job
         return job
 
-    async def get_job_status(self, job_id: str) -> Optional[EvaluationJob]:
+    async def get_job_status(self, job_id: str) -> EvaluationJob | None:
         """Get job status."""
         return self._jobs.get(job_id)
 
-    async def get_evaluation_results(self, job_id: str) -> Optional[EvaluationResponse]:
+    async def get_evaluation_results(self, job_id: str) -> EvaluationResponse | None:
         """Get evaluation results."""
         job = self._jobs.get(job_id)
         if not job or job.status != JobStatus.COMPLETED:
@@ -115,7 +115,12 @@ class IntegrationTestAdapter(FrameworkAdapter):
             benchmark_id=job.request.benchmark_id,
             model_name=job.request.model.name,
             results=results,
-            overall_score=sum(r.metric_value for r in results) / len(results)
+            overall_score=sum(
+                float(r.metric_value)
+                for r in results
+                if isinstance(r.metric_value, int | float)
+            )
+            / len(results)
             if results
             else 0,
             num_examples_evaluated=job.request.num_examples or 100,
@@ -260,7 +265,7 @@ class TestAdapterIntegration:
         # For now, we'll test the client logic directly
 
         # Create mock responses for the client
-        with test_client as client:
+        with test_client:
             base_url = "http://testserver"  # TestClient uses this as base
 
             # We would need to mock the httpx client or use a real server
